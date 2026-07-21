@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Tic-Tac-Toe AI</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--cell:110px}
+body{background:#0f0f13;color:#e8e8f0;font-family:'Segoe UI',system-ui,sans-serif;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.wrap{width:100%;max-width:460px;display:flex;flex-direction:column;align-items:center;gap:1.4rem}
+header{text-align:center}
+h1{font-size:2.2rem;font-weight:700;color:#e8e8f0}
+h1 span{color:#7c5cfc}
+.sub{color:#7070a0;font-size:.9rem;margin-top:4px}
+.sub strong{color:#e8e8f0}
+.controls{display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;justify-content:center;width:100%}
+.controls label{display:flex;flex-direction:column;gap:4px;font-size:.75rem;
+  color:#7070a0;text-transform:uppercase;letter-spacing:.05em}
+select{background:#1a1a24;color:#e8e8f0;border:1px solid #2e2e42;border-radius:8px;
+  padding:7px 10px;font-size:.875rem;cursor:pointer;outline:none}
+select:hover{border-color:#7c5cfc}
+#resetBtn{background:#7c5cfc;color:#fff;border:none;border-radius:8px;
+  padding:8px 20px;font-size:.875rem;font-weight:600;cursor:pointer;align-self:flex-end}
+#resetBtn:hover{opacity:.88}
+#resetBtn:active{transform:scale(.97)}
+#status{font-size:1rem;color:#7070a0;min-height:1.4rem;text-align:center}
+#status.thinking{color:#f65b7a}
+#status.win{color:#a8ff78;font-weight:600}
+#status.draw{color:#7070a0}
+.board{display:grid;grid-template-columns:repeat(3,var(--cell));
+  grid-template-rows:repeat(3,var(--cell));gap:10px}
+.cell{width:var(--cell);height:var(--cell);background:#1a1a24;border:1px solid #2e2e42;
+  border-radius:12px;display:flex;align-items:center;justify-content:center;
+  font-size:2.8rem;font-weight:700;cursor:pointer;user-select:none;
+  transition:background .15s,border-color .15s,transform .1s}
+.cell:hover{background:#22223a;border-color:#7c5cfc;transform:scale(1.04)}
+.cell.taken{cursor:default;pointer-events:none}
+.cell.x{color:#5b8df6}
+.cell.o{color:#f65b7a}
+.cell.win{background:#1a2f1a;border-color:#a8ff78;box-shadow:0 0 18px rgba(168,255,120,.25)}
+@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+.symbol{display:inline-block;animation:pop .2s ease forwards}
+.scores{display:flex;gap:12px;width:100%}
+.sc{flex:1;background:#1a1a24;border:1px solid #2e2e42;border-radius:12px;
+  padding:.8rem 1rem;display:flex;flex-direction:column;align-items:center;gap:4px}
+.sc-label{font-size:.72rem;color:#7070a0;text-transform:uppercase;letter-spacing:.06em}
+.sc-val{font-size:1.6rem;font-weight:700;color:#5b8df6}
+.sc.d .sc-val{color:#7070a0}
+.sc.a .sc-val{color:#f65b7a}
+.info{width:100%;background:#1a1a24;border:1px solid #2e2e42;border-radius:12px;
+  padding:.9rem 1.1rem;font-size:.82rem;color:#7070a0;line-height:1.65;min-height:72px}
+.info strong{color:#e8e8f0}
+.info .nodes{margin-top:6px;font-size:.75rem;color:#444466}
+@media(max-width:400px){:root{--cell:90px}h1{font-size:1.7rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tic-Tac-Toe <span>AI</span></h1>
+    <p class="sub">You are <strong>X</strong> &mdash; AI is <strong>O</strong></p>
+  </header>
+
+  <div class="controls">
+    <label>Algorithm
+      <select id="algo">
+        <option value="minimax">Minimax</option>
+        <option value="alphabeta" selected>Alpha-Beta Pruning</option>
+      </select>
+    </label>
+    <label>Difficulty
+      <select id="diff">
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard" selected>Unbeatable</option>
+      </select>
+    </label>
+    <button id="resetBtn">New Game</button>
+  </div>
+
+  <div id="status">Your turn!</div>
+
+  <div class="board" id="board"></div>
+
+  <div class="scores">
+    <div class="sc"><span class="sc-label">You (X)</span><span class="sc-val" id="sX">0</span></div>
+    <div class="sc d"><span class="sc-label">Draws</span><span class="sc-val" id="sD">0</span></div>
+    <div class="sc a"><span class="sc-label">AI (O)</span><span class="sc-val" id="sO">0</span></div>
+  </div>
+
+  <div class="info" id="info"></div>
+</div>
+
+<script>
+
+const HUMAN = 'X', AI = 'O', EMPTY = null;
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+let board, gameOver, aiThinking;
+let scores = {h:0, d:0, a:0};
+let nodesSearched = 0;
+
+const boardEl  = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const infoEl   = document.getElementById('info');
+const algoSel  = document.getElementById('algo');
+const diffSel  = document.getElementById('diff');
+
+function buildBoard() {
+  boardEl.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.i = i;
+    cell.addEventListener('click', onCellClick);
+    boardEl.appendChild(cell);
+  }
+}
+
+function render(winCells = []) {
+  boardEl.querySelectorAll('.cell').forEach((cell, i) => {
+    const v = board[i];
+    
+    cell.className = 'cell';
+    cell.innerHTML = '';
+
+    if (v) {
+      cell.classList.add('taken', v === HUMAN ? 'x' : 'o');
+      const s = document.createElement('span');
+      s.className   = 'symbol';
+      s.textContent = v;
+      cell.appendChild(s);
+    }
+    if (winCells.includes(i)) cell.classList.add('win');
+  });
+}
+
+function setStatus(msg, cls = '') {
+  statusEl.textContent = msg;
+  statusEl.className   = cls;
+}
+
+function setInfo(nodes) {
+  const ab = algoSel.value === 'alphabeta';
+  const desc = ab
+    ? '<strong>Alpha-Beta Pruning</strong> — prunes branches that cannot affect the result. Reduces O(b<sup>d</sup>) to O(b<sup>d/2</sup>) in the best case.'
+    : '<strong>Minimax</strong> — exhaustively explores every game state, picking the optimal move. Complexity: O(b<sup>d</sup>).';
+  infoEl.innerHTML = desc + (nodes !== undefined
+    ? `<div class="nodes">Nodes searched: <strong>${nodes.toLocaleString()}</strong></div>` : '');
+}
+
+function updateScores() {
+  document.getElementById('sX').textContent = scores.h;
+  document.getElementById('sD').textContent = scores.d;
+  document.getElementById('sO').textContent = scores.a;
+}
+
+function checkResult(b) {
+  for (const [a,c,d] of LINES)
+    if (b[a] && b[a] === b[c] && b[a] === b[d])
+      return { winner: b[a], cells: [a,c,d] };
+  if (b.every(v => v !== EMPTY)) return { winner: 'draw', cells: [] };
+  return { winner: null, cells: [] };
+}
+
+function getEmpty(b) {
+  return b.reduce((acc,v,i) => (v === EMPTY ? [...acc, i] : acc), []);
+}
+
+function minimax(b, depth, isMax) {
+  nodesSearched++;
+  const {winner} = checkResult(b);
+  if (winner === AI)    return 10 - depth;
+  if (winner === HUMAN) return depth - 10;
+  if (winner === 'draw') return 0;
+
+  const emp = getEmpty(b);
+  if (isMax) {
+    let best = -Infinity;
+    for (const i of emp) { b[i]=AI;    best=Math.max(best,minimax(b,depth+1,false)); b[i]=EMPTY; }
+    return best;
+  } else {
+    let best = +Infinity;
+    for (const i of emp) { b[i]=HUMAN; best=Math.min(best,minimax(b,depth+1,true));  b[i]=EMPTY; }
+    return best;
+  }
+}
+
+function alphabeta(b, depth, isMax, alpha, beta) {
+  nodesSearched++;
+  const {winner} = checkResult(b);
+  if (winner === AI)    return 10 - depth;
+  if (winner === HUMAN) return depth - 10;
+  if (winner === 'draw') return 0;
+
+  const emp = getEmpty(b);
+  if (isMax) {
+    let best = -Infinity;
+    for (const i of emp) {
+      b[i] = AI;
+      best  = Math.max(best, alphabeta(b, depth+1, false, alpha, beta));
+      b[i]  = EMPTY;
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = +Infinity;
+    for (const i of emp) {
+      b[i] = HUMAN;
+      best  = Math.min(best, alphabeta(b, depth+1, true, alpha, beta));
+      b[i]  = EMPTY;
+      beta  = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function bestMove() {
+  nodesSearched = 0;
+  const algo = algoSel.value;
+  let bestScore = -Infinity, bestIdx = -1;
+  for (const i of getEmpty(board)) {
+    board[i] = AI;
+    const s = algo === 'alphabeta'
+      ? alphabeta(board, 0, false, -Infinity, +Infinity)
+      : minimax(board, 0, false);
+    board[i] = EMPTY;
+    if (s > bestScore) { bestScore = s; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+function aiMove() {
+  const diff  = diffSel.value;
+  const empty = getEmpty(board);
+  if (diff === 'easy')   return empty[Math.floor(Math.random() * empty.length)];
+  if (diff === 'medium') return Math.random() < 0.6 ? bestMove() : empty[Math.floor(Math.random() * empty.length)];
+  return bestMove();
+}
+
+function endGame(result) {
+  gameOver = true;
+  render(result.cells);
+  if      (result.winner === HUMAN) { scores.h++; setStatus('You win! 🎉', 'win'); }
+  else if (result.winner === AI)    { scores.a++; setStatus('AI wins! Try again.', 'win'); }
+  else                              { scores.d++; setStatus("It's a draw!", 'draw'); }
+  updateScores();
+}
+
+function onCellClick(e) {
+  const i = parseInt(e.currentTarget.dataset.i);
+  if (gameOver || aiThinking || board[i] !== EMPTY) return;
+
+  board[i] = HUMAN;
+  render();
+
+  const res = checkResult(board);
+  if (res.winner !== null) return endGame(res);
+
+  setStatus('AI is thinking…', 'thinking');
+  aiThinking = true;
+  setTimeout(() => {
+    const idx = aiMove();
+    board[idx] = AI;
+    render();
+    setInfo(nodesSearched);
+    aiThinking = false;
+    const res2 = checkResult(board);
+    if (res2.winner !== null) return endGame(res2);
+    setStatus('Your turn!');
+  }, 150);
+}
+
+function reset() {
+  board      = Array(9).fill(EMPTY);
+  gameOver   = false;
+  aiThinking = false;
+  render();
+  setStatus('Your turn!');
+  setInfo();
+}
+
+document.getElementById('resetBtn').addEventListener('click', reset);
+algoSel.addEventListener('change', reset);
+diffSel.addEventListener('change', reset);
+
+buildBoard();
+reset();
+</script>
+</body>
+</html>
